@@ -1,6 +1,6 @@
-# stoda-plugin
+# Stoda plugin for Claude Code
 
-The Stoda plugin for Claude Code, and the marketplace it is installed from.
+The [Stoda](https://stoda.ai) plugin for Claude Code, and the marketplace it is installed from.
 
 ## Status
 
@@ -8,11 +8,9 @@ Pre-release. The plugin has one skill, `guide`: ask "where am I?" or "what's nex
 reads the current folder, its git repository and your GitHub CLI sign-in, without changing anything, and gives one
 next step. It never makes changes itself: for the turn it answers, its shell, file, web and subagent tools are
 removed (a request to run a command in that turn is denied). This is guidance, not a security sandbox; on your next
-message Claude has its usual tools and permissions again. Nothing here is published yet; this README describes how installing and
-updating will work once it is.
+message Claude has its usual tools and permissions again.
 
-Not done yet, so no release is made (`RELEASE-HOLD` lists each): the verified copyright holder in `LICENSE`, an
-approved Stoda logo and plugin icon, and review of this README and the first skill.
+Unreleased: nothing can be installed until the first release (`RELEASE-HOLD` lists what is left before it).
 
 ## Install
 
@@ -49,8 +47,9 @@ them at run time from outside the plugin.
 
 ## License
 
-MIT, for the Stoda-owned code, skills and configuration in this repository (`LICENSE`). It doesn't relicense anything
-a third party owns: such files keep their own license and notices. The Stoda name and logo are not covered by it.
+MIT, copyright Stoda (`LICENSE`), for the Stoda-owned code, skills and configuration in this repository. It doesn't
+relicense anything a third party owns: such files keep their own license and notices. It grants no rights to the Stoda
+name or logo. No logo is included yet.
 
 ## Development
 

@@ -1,7 +1,5 @@
-release-gates-open: these must be done before a release; remove this file in a reviewed pull request once they are.
-- LICENSE names the verified copyright holder (MIT is decided; the holder line still says "to be verified").
-- Approved Stoda logo/icon added, or a decision to release without one.
-- README wording and the first skill reviewed for release.
-- Exact release bytes, security and provenance reviewed; public install and update proven from the published repo.
-- The guide's tool restriction from the published repo: checked locally (2026-11-16, Claude Code 2.1.326: injection
-  ran; a requested `touch` in the guide's turn was denied); repeat once installed from the published repo.
+release-gates-open: these must be done before the first release; remove this file in a reviewed pull request once
+they are.
+- The published repository's exact bytes, security and provenance reviewed.
+- Public install and update proven from the published repository, without private credentials, including that
+  installing fails before the first release and that the guide's tool restriction holds in the installed copy.

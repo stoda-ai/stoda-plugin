@@ -2,7 +2,8 @@
   "name": "stoda",
   "description": "Stoda plugins for Claude Code",
   "owner": {
-    "name": "Stoda"
+    "name": "Stoda",
+    "url": "https://stoda.ai"
   },
   "plugins": [
     {
