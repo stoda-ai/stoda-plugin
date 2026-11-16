@@ -48,8 +48,9 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   [ "${lines[2]}" = "repo yes" ]
   [ "${lines[3]}" = "branch main" ]
   [ "${lines[4]}" = "github none" ]
-  [ "${lines[5]}" = "changes 0" ]
-  [ "${lines[6]}" = "unpushed no-upstream" ]
+  [ "${lines[5]}" = "upstream none" ]
+  [ "${lines[6]}" = "changes 0" ]
+  [ "${lines[7]}" = "unpushed no-upstream" ]
 }
 
 @test "GitHub remotes in https, ssh and scp form give owner/repo; anything else is other" {
@@ -75,8 +76,8 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   printf 'new\n' > b.txt
   git commit -q --allow-empty -m two
   run "$inspect"
-  [ "${lines[5]}" = "changes 2" ]
-  [ "${lines[6]}" = "unpushed 1" ]
+  [ "${lines[6]}" = "changes 2" ]
+  [ "${lines[7]}" = "unpushed 1" ]
   git checkout -q --detach HEAD
   run "$inspect"
   [ "${lines[3]}" = "branch detached" ]
@@ -108,10 +109,65 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   [ ! -e .git/index.lock ]
 }
 
-@test "the guide skill can only run the inspector and can't edit files" {
+# Declarations only: allowed-tools pre-approves, it doesn't restrict (other Bash commands still follow the session's
+# permissions). Enforcement in a live session is a separate, open check.
+@test "the guide skill pre-approves only the inspector and removes the file-editing tools" {
   skill=$BATS_TEST_DIRNAME/../plugins/stoda/skills/guide/SKILL.md
   grep -qx 'allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/inspect.sh)' "$skill"
   grep -qx 'disallowed-tools: Write, Edit, NotebookEdit' "$skill"
   run grep -c 'scripts/' "$skill"
   [ "$output" -eq 2 ]
+}
+
+# Codex review 13: a configured fsmonitor hook must not run; bash 3.2's here-strings needed a writable temp folder.
+@test "a configured fsmonitor hook never runs, and an unwritable temp folder changes no fact" {
+  repo
+  git remote add origin https://github.com/acme/widget.git
+  printf '#!/bin/sh\ntouch "%s/hook-ran"\n' "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/hook"
+  chmod +x "$BATS_TEST_TMPDIR/hook"
+  git config core.fsmonitor "$BATS_TEST_TMPDIR/hook"
+  ro=$BATS_TEST_TMPDIR/ro
+  mkdir -p "$ro" && chmod 500 "$ro"
+  for sh in "$BASH" /bin/bash; do
+    [ -x "$sh" ] || continue
+    TMPDIR=$ro run "$sh" "$inspect"
+    [ "$status" -eq 0 ]
+    [ "${lines[4]}" = "github acme/widget" ] || { echo "$sh: $output"; false; }
+  done
+  [ ! -e "$BATS_TEST_TMPDIR/hook-ran" ]
+}
+
+@test "facts it can't read are unknown, never clean; inside .git is not a working tree" {
+  repo
+  printf 'garbage' > .git/index
+  run "$inspect"
+  [ "${lines[2]}" = "repo yes" ]
+  grep -qx 'changes unknown' <<< "$output"
+  cd .git
+  run "$inspect"
+  [ "${lines[2]}" = "repo no" ]
+  run grep -c -e '^branch ' -e '^changes ' <<< "$output"
+  [ "$output" = 0 ]
+}
+
+@test "the upstream is reported, and a repo without one has no unpushed count" {
+  repo
+  run "$inspect"
+  grep -qx 'upstream none' <<< "$output"
+  grep -qx 'unpushed no-upstream' <<< "$output"
+  git init -q --bare "$BATS_TEST_TMPDIR/remote.git"
+  git remote add origin "$BATS_TEST_TMPDIR/remote.git"
+  git push -q -u origin main
+  run "$inspect"
+  grep -qx 'upstream origin/main' <<< "$output"
+  grep -qx 'unpushed 0' <<< "$output"
+}
+
+@test "the guide claims a push only with an upstream, and treats unknown as unknown" {
+  skill=$BATS_TEST_DIRNAME/../plugins/stoda/skills/guide/SKILL.md
+  grep -q '| otherwise | Everything is committed and pushed to `upstream`.' "$skill"
+  grep -q '`unpushed` above 0, or `upstream none` | Push this branch.' "$skill"
+  grep -q 'never treat it as zero' "$skill"
+  run grep -c 'on GitHub\.' "$skill"
+  [ "$output" = 0 ]
 }

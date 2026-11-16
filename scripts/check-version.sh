@@ -14,7 +14,7 @@ list=$(surface_paths "$base" HEAD) || { echo "error no-release-surface"; exit 1;
 paths=()
 while IFS= read -r p; do paths+=("$p"); done <<< "$list"
 if git diff --quiet "$base" HEAD -- "${paths[@]}"; then echo unchanged; exit 0; fi
-new=$(jq -er '.version' "$manifest") || { echo "error no-version"; exit 1; }
+new=$(git show "HEAD:$manifest" | jq -er '.version') || { echo "error no-version"; exit 1; }
 old=$(git show "$base:$manifest" 2>/dev/null | jq -er '.version' 2>/dev/null) || { echo ok; exit 0; }
 [[ "$new" != "$old" ]] || { echo "error version-not-raised $old"; exit 1; }
 # The new version must sort after the old one (semver core only, no pre-release ordering).

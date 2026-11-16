@@ -16,9 +16,10 @@ here=$(dirname "${BASH_SOURCE[0]}")
 "$here/release-gate.sh" "$sha"
 out=$("$here/tag-release.sh" "$sha") || { echo "$out"; exit 1; }
 echo "$out"
-refs=("$sha:refs/heads/release")
-case $out in
-  tagged*) refs+=("refs/tags/$(cut -d' ' -f2 <<< "$out")") ;;
-esac
+# The version tag goes in every push, not only a new one: a retry after a failed push finds the tag already made
+# here (`exists`) and must still send it. Pushing a tag the remote already has at the same commit changes nothing.
+tag=${out#* }
+tag=${tag%% *}
+refs=("$sha:refs/heads/release" "refs/tags/$tag")
 git push --atomic --porcelain "$remote" "${refs[@]}" >/dev/null || { echo "error push-rejected"; exit 1; }
 echo "published $sha"

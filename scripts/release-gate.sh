@@ -6,8 +6,13 @@ set -euo pipefail
 (( $# == 1 )) || { echo "error usage"; exit 2; }
 sha=$(git rev-parse -q --verify "$1^{commit}") || { echo "error unknown-commit"; exit 2; }
 if git cat-file -e "$sha:RELEASE-HOLD" 2>/dev/null; then
-  echo "held $(git show "$sha:RELEASE-HOLD" | head -n 1 | cut -d: -f1)"; exit 1
+  hold=$(git show "$sha:RELEASE-HOLD") || hold=unreadable
+  hold=${hold%%$'\n'*}
+  echo "held ${hold%%:*}"; exit 1
 fi
 git cat-file -e "$sha:LICENSE" 2>/dev/null || { echo "held no-license"; exit 1; }
-if git show "$sha:LICENSE" | grep -qi 'to be verified'; then echo "held copyright-holder-unverified"; exit 1; fi
+# Read whole, then matched in the shell: a pipe into `grep -q` could end early and, under pipefail, read as no match.
+license=$(git show "$sha:LICENSE") || { echo "held license-unreadable"; exit 1; }
+shopt -s nocasematch
+if [[ "$license" == *"to be verified"* ]]; then echo "held copyright-holder-unverified"; exit 1; fi
 echo open

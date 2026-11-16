@@ -199,3 +199,37 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   [ "$status" -eq 1 ]
   [ "$output" = "held copyright-holder-unverified" ]
 }
+
+# Codex review 13: a large LICENSE can't make the gate fail open; a retry still sends the tag; any directory works.
+@test "a large LICENSE with the unverified holder line near the top is still held" {
+  { printf 'MIT License\n\nCopyright (c) 2026 [copyright holder: to be verified before release]\n'
+    for i in $(seq 1 20000); do printf 'filler line %s of the license text\n' "$i"; done; } > LICENSE
+  commit
+  run scripts/release-gate.sh HEAD
+  [ "$status" -eq 1 ]
+  [ "$output" = "held copyright-holder-unverified" ]
+}
+
+@test "a retry after a failed push still sends the version tag" {
+  sha=$(git rev-parse HEAD)
+  run scripts/publish.sh HEAD "$BATS_TEST_TMPDIR/missing.git"
+  [ "$status" -eq 1 ]
+  [ "$(git rev-parse -q --verify 'stoda--v0.1.0^{commit}')" = "$sha" ]
+  run scripts/publish.sh HEAD "$remote"
+  [ "$status" -eq 0 ]
+  [ "${lines[1]}" = "exists stoda--v0.1.0 $sha" ]
+  [ "$(remote_ref refs/heads/release)" = "$sha" ]
+  [ "$(remote_ref 'refs/tags/stoda--v0.1.0^{commit}')" = "$sha" ]
+}
+
+@test "the version check and the tagger give the same answer from a subdirectory" {
+  base=$(git rev-parse HEAD)
+  scripts/tag-release.sh HEAD
+  printf 'more\n' >> README.md; commit
+  cd scripts
+  run ./check-version.sh "$base"
+  [ "$status" -eq 1 ]
+  [ "$output" = "error version-not-raised 0.1.0" ]
+  run ./tag-release.sh HEAD
+  [ "$status" -eq 1 ]
+}
