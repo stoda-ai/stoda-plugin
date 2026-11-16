@@ -6,7 +6,9 @@ The Stoda plugin for Claude Code, and the marketplace it is installed from.
 
 Pre-release. The plugin has one skill, `guide`: ask "where am I?" or "what's next?" (or run `/stoda:guide`) and it
 reads the current folder, its git repository and your GitHub CLI sign-in, without changing anything, and gives one
-next step. It never makes changes itself. Nothing here is published yet; this README describes how installing and
+next step. It never makes changes itself: for the turn it answers, its shell, file, web and subagent tools are
+removed (a request to run a command in that turn is denied). This is guidance, not a security sandbox; on your next
+message Claude has its usual tools and permissions again. Nothing here is published yet; this README describes how installing and
 updating will work once it is.
 
 Not done yet, so no release is made (`RELEASE-HOLD` lists each): the verified copyright holder in `LICENSE`, an

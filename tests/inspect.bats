@@ -186,6 +186,7 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   skill=$BATS_TEST_DIRNAME/../plugins/stoda/skills/guide/SKILL.md
   grep -q '| otherwise | No commits are waiting to be pushed to `upstream` (as last fetched here' "$skill"
   grep -q "you didn't look at uncommitted" "$skill"
+  grep -q "don't say whether it was ever pushed" "$skill"
   grep -q '`unpushed` above 0, or `upstream none` | Push this branch.' "$skill"
   grep -q 'never treat it as zero' "$skill"
   run grep -c 'on GitHub\.' "$skill"

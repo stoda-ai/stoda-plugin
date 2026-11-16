@@ -3,5 +3,5 @@ release-gates-open: these must be done before a release; remove this file in a r
 - Approved Stoda logo/icon added, or a decision to release without one.
 - README wording and the first skill reviewed for release.
 - Exact release bytes, security and provenance reviewed; public install and update proven from the published repo.
-- The guide's tool restriction in a live session: with the inspector injected and every acting tool disallowed, the
-  model must have no tool while the guide is active (local live check, then again from the published repo).
+- The guide's tool restriction from the published repo: checked locally (2026-11-16, Claude Code 2.1.326: injection
+  ran; a requested `touch` in the guide's turn was denied); repeat once installed from the published repo.

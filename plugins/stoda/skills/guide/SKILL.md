@@ -4,7 +4,8 @@ description: "Where am I and what should I do next? Reads this folder, its git r
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/inspect.sh)
 disallowed-tools: Bash, Write, Edit, NotebookEdit, Read, Glob, Grep, WebFetch, WebSearch, Agent, Task
 ---
-This skill only reads; while it is active you have no tools, and you need none. The inspection already ran:
+This skill only reads. It gives guidance; it doesn't act, and for this turn its acting tools are removed. The
+inspection already ran:
 
 !`${CLAUDE_PLUGIN_ROOT}/scripts/inspect.sh`
 
@@ -13,7 +14,8 @@ Each line above is `<fact> <value>`. Use only those facts.
 1. Show a short card, plain words, one line each, only for facts that were printed:
    - Folder: `folder`, and whether it is a git repository (`repo`)
    - Branch: `branch`; GitHub repository: `github` (`none`: no `origin` remote; `other`: `origin` isn't on GitHub)
-   - Not yet sent: `unpushed` commits not on `upstream` (as last fetched here)
+   - Not yet sent: `unpushed` commits not on `upstream` (as last fetched here). With `upstream none`, say only that
+     this branch has no upstream recorded here; don't say whether it was ever pushed.
    - GitHub sign-in: `gh-auth`
    - Stoda plugin: version `plugin`
    Say "I couldn't tell" for an `unknown` fact; never treat it as zero. Say that you didn't look at uncommitted
