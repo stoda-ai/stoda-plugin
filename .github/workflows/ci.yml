@@ -31,10 +31,9 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: scripts/check-version.sh "origin/$BASE_REF"
 
-  # Merge to main is the publish event: users install from main. This job records the release with a tag
-  # (stoda--v<version>), after `test` passed on that exact commit, one run at a time, never moving a tag, and only
-  # once the release gate is open. The gate can't stop anyone reading main: while RELEASE-HOLD stands, main must not
-  # be pushed anywhere users can reach.
+  # Users install from the `release` branch, never from main: merging to main publishes nothing. After `test` passed on
+  # this exact commit, publish.sh opens the release gate (RELEASE-HOLD, LICENSE), tags a new version once, and moves
+  # `release` to the commit together with that tag in one atomic, fast-forward-only push. One run at a time.
   release:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -49,17 +48,10 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      # Fails closed: no release is recorded while RELEASE-HOLD exists or LICENSE is missing at this commit.
-      - name: release gate
-        env:
-          SHA: ${{ github.sha }}
-        run: scripts/release-gate.sh "$SHA"
-      - name: tag the release
+      - name: publish
         env:
           SHA: ${{ github.sha }}
         run: |
-          out=$(scripts/tag-release.sh "$SHA")
-          echo "$out"
-          case $out in
-            tagged*) git push origin "refs/tags/$(cut -d' ' -f2 <<< "$out")" ;;
-          esac
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          scripts/publish.sh "$SHA"

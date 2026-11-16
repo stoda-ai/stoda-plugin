@@ -1,2 +1,5 @@
-license-undecided: no license has been chosen, so no release is tagged. Remove this file in a reviewed pull request
-that also adds LICENSE, once the license is decided.
+release-gates-open: these must be done before a release; remove this file in a reviewed pull request once they are.
+- LICENSE names the verified copyright holder (MIT is decided; the holder line still says "to be verified").
+- Approved Stoda logo/icon added, or a decision to release without one.
+- README wording and the first skill reviewed for release.
+- Exact release bytes, security and provenance reviewed; public install and update proven from the published repo.

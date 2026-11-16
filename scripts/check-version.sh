@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# Fails a change to anything users receive (the paths in release-surface: the manifests, the plugin, README, LICENSE,
-# assets) without raising plugin.json's version: an installed copy updates only when that string changes. Usage: check-version.sh <base-ref>. Prints `ok`, `unchanged` (nothing under the plugin
-# changed) or `error <reason>`; exit 1 on a missing bump, 2 on bad usage.
+# Fails a change to anything users receive without raising plugin.json's version: an installed copy updates only when
+# that string changes. "Anything users receive" is the union of the base's and this commit's release-surface plus the
+# manifests, the plugin and the list itself (release-lib.sh). Usage: check-version.sh <base-ref>.
+# Prints `ok`, `unchanged` (nothing users receive changed) or `error <reason>`; exit 1 on a missing bump, 2 on bad usage.
 set -euo pipefail
 (( $# == 1 )) || { echo "error usage"; exit 2; }
 base=$1
 manifest=plugins/stoda/.claude-plugin/plugin.json
 git rev-parse -q --verify "$base^{commit}" >/dev/null || { echo "error unknown-base"; exit 2; }
-# The release surface: every path users receive (release-surface, read from the commit being checked).
-surface() { git show "$1:release-surface" | grep -v -e '^#' -e '^$'; }
+# shellcheck source=release-lib.sh source-path=SCRIPTDIR
+source "$(dirname "${BASH_SOURCE[0]}")/release-lib.sh"
+list=$(surface_paths "$base" HEAD) || { echo "error no-release-surface"; exit 1; }
 paths=()
-while IFS= read -r p; do paths+=("$p"); done < <(surface HEAD)
-(( ${#paths[@]} > 0 )) || { echo "error no-release-surface"; exit 1; }
+while IFS= read -r p; do paths+=("$p"); done <<< "$list"
 if git diff --quiet "$base" HEAD -- "${paths[@]}"; then echo unchanged; exit 0; fi
 new=$(jq -er '.version' "$manifest") || { echo "error no-version"; exit 1; }
 old=$(git show "$base:$manifest" 2>/dev/null | jq -er '.version' 2>/dev/null) || { echo ok; exit 0; }
