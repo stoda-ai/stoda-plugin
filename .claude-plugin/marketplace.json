@@ -5,7 +5,7 @@
   "plugins": [
     {
       "name": "stoda",
-      "source": "./plugins/stoda",
+      "source": { "source": "github", "repo": "stoda-ai/stoda-plugin", "ref": "release" },
       "description": "Stoda skills for Claude Code"
     }
   ]

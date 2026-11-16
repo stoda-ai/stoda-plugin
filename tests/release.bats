@@ -233,3 +233,12 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   run ./tag-release.sh HEAD
   [ "$status" -eq 1 ]
 }
+
+# Bootstrap: the catalog on main must never install main. Its plugin entry fetches the CI-moved release branch, which
+# doesn't exist before the first release, so an install fails closed rather than taking untested code.
+@test "the catalog's plugin entry installs only from the release branch of this repository" {
+  cat=$BATS_TEST_DIRNAME/../.claude-plugin/marketplace.json
+  [ "$(jq -c '[.plugins[] | .source]' "$cat")" = '[{"source":"github","repo":"stoda-ai/stoda-plugin","ref":"release"}]' ]
+  run jq -e '[.plugins[] | .source | strings] | length == 0' "$cat"
+  [ "$status" -eq 0 ]
+}

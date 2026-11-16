@@ -24,13 +24,16 @@ In Claude Code:
 ```
 
 or from a shell: `claude plugin marketplace add stoda-ai/stoda-plugin#release`, then `claude plugin install stoda@stoda`.
-Every command the plugin adds is `/stoda:<name>`.
+Every command the plugin adds is `/stoda:<name>`. On a machine without a GitHub SSH key, set
+`CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` first; no GitHub account is needed for this public repository.
 
 ## Updates
 
 Users install from the `release` branch. Changes merge to `main`; CI tests every commit on `main`, and only a commit
 that passed moves `release` (fast-forward only, together with its version tag, in one push), so nothing untested reaches
-users. A change reaches installed copies only when it raises `version` in `plugins/stoda/.claude-plugin/plugin.json`;
+users. The catalog's plugin entry itself points at `release`, so the plugin comes from `release` even when the catalog
+is read from `main`; until the first release there is no `release` branch, and installing fails instead of taking
+untested code. A change reaches installed copies only when it raises `version` in `plugins/stoda/.claude-plugin/plugin.json`;
 CI refuses a pull request that changes anything users receive (`release-surface`) without raising it.
 Run `/plugin marketplace update stoda` (or turn on auto-update for the `stoda` marketplace in `/plugin`) to pick up
 a new version.
