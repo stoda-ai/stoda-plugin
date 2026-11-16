@@ -9,8 +9,10 @@ setup() {
   git config --global init.defaultBranch main
   git config --global commit.gpgsign false
   repo=$BATS_TEST_TMPDIR/repo
-  mkdir -p "$repo/plugins/stoda/.claude-plugin" "$repo/scripts" "$repo/docs"
-  cp "$BATS_TEST_DIRNAME/../scripts/check-version.sh" "$BATS_TEST_DIRNAME/../scripts/tag-release.sh" "$repo/scripts/"
+  mkdir -p "$repo/plugins/stoda/.claude-plugin" "$repo/scripts" "$repo/docs" "$repo/.claude-plugin"
+  cp "$BATS_TEST_DIRNAME"/../scripts/{check-version,tag-release,release-gate}.sh "$repo/scripts/"
+  cp "$BATS_TEST_DIRNAME/../release-surface" "$repo/"
+  printf '# readme\n' > "$repo/README.md"
   cd "$repo"
   git init -q
   version 0.1.0
@@ -83,4 +85,44 @@ commit() { git add -A; git commit -q -m "${1:-change}"; }
   version 9.9.9
   run scripts/tag-release.sh "$sha"
   [ "$output" = "tagged stoda--v0.1.0 $sha" ]
+}
+
+@test "a README or manifest change needs a new version, and after a release it is not a no-op" {
+  base=$(git rev-parse HEAD)
+  scripts/tag-release.sh HEAD
+  printf 'more\n' >> README.md; commit
+  run scripts/check-version.sh "$base"
+  [ "$status" -eq 1 ]
+  [ "$output" = "error version-not-raised 0.1.0" ]
+  run scripts/tag-release.sh HEAD
+  [ "$status" -eq 1 ]
+  [[ "$output" == "error tag-elsewhere stoda--v0.1.0 "* ]]
+  printf '{"name": "stoda", "owner": {"name": "Stoda"}, "plugins": []}\n' > .claude-plugin/marketplace.json
+  version 0.1.1; commit
+  run scripts/check-version.sh "$base"
+  [ "$output" = ok ]
+}
+
+@test "the release gate holds while RELEASE-HOLD exists or LICENSE is missing, and opens with LICENSE alone" {
+  printf 'license-undecided: reason\n' > RELEASE-HOLD; commit
+  run scripts/release-gate.sh HEAD
+  [ "$status" -eq 1 ]
+  [ "$output" = "held license-undecided" ]
+  git rm -q RELEASE-HOLD; commit
+  run scripts/release-gate.sh HEAD
+  [ "$status" -eq 1 ]
+  [ "$output" = "held no-license" ]
+  printf 'terms\n' > LICENSE; commit
+  run scripts/release-gate.sh HEAD
+  [ "$status" -eq 0 ]
+  [ "$output" = open ]
+}
+
+@test "the workflow runs the release gate before tagging, and the repository is held" {
+  wf=$BATS_TEST_DIRNAME/../.github/workflows/ci.yml
+  gate=$(grep -n 'scripts/release-gate.sh' "$wf" | cut -d: -f1)
+  tag=$(grep -n 'scripts/tag-release.sh' "$wf" | cut -d: -f1)
+  [ -n "$gate" ] && [ -n "$tag" ] && (( gate < tag ))
+  [ -f "$BATS_TEST_DIRNAME/../RELEASE-HOLD" ]
+  [ ! -e "$BATS_TEST_DIRNAME/../LICENSE" ]
 }

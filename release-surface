@@ -1,0 +1,6 @@
+# Every path users receive with a release: a change to any of them needs a new plugin version.
+.claude-plugin
+plugins/stoda
+README.md
+LICENSE
+assets

@@ -31,8 +31,10 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: scripts/check-version.sh "origin/$BASE_REF"
 
-  # Merge to main is the publish event: users install from main. This job only records the release with a tag
-  # (stoda--v<version>), after `test` passed on that exact commit, one run at a time, never moving a tag.
+  # Merge to main is the publish event: users install from main. This job records the release with a tag
+  # (stoda--v<version>), after `test` passed on that exact commit, one run at a time, never moving a tag, and only
+  # once the release gate is open. The gate can't stop anyone reading main: while RELEASE-HOLD stands, main must not
+  # be pushed anywhere users can reach.
   release:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -47,6 +49,11 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+      # Fails closed: no release is recorded while RELEASE-HOLD exists or LICENSE is missing at this commit.
+      - name: release gate
+        env:
+          SHA: ${{ github.sha }}
+        run: scripts/release-gate.sh "$SHA"
       - name: tag the release
         env:
           SHA: ${{ github.sha }}
