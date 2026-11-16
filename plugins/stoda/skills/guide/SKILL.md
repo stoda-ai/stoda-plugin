@@ -21,13 +21,13 @@ Look before suggesting anything, and change nothing: this skill only reads.
    | When | Next step |
    |---|---|
    | `repo no` | Open your project's folder in Claude Code, then ask me again. |
-   | `tool git no`, or `repo`, `changes` or `unpushed` is `unknown` | I couldn't read this repository; run `git status` in your terminal and tell me what it says. |
+   | `tool git no`, or `repo`, `branch`, `upstream`, `changes` or `unpushed` is `unknown` | I couldn't read this repository; run `git status` in your terminal and tell me what it says. |
    | `branch detached` | You're not on a branch; switch to one before saving work. |
    | `changes` above 0 | Review your changes and save them in a commit. |
    | `github none` | This repository isn't connected to GitHub yet. |
    | `unpushed` above 0, or `upstream none` | Push this branch. |
    | `tool gh no` or `gh-auth signed-out` | Sign in to GitHub: run `gh auth login` in your terminal. |
-   | otherwise | Everything is committed and pushed to `upstream`. Tell me what you'd like to change next. |
+   | otherwise | Everything is committed, with no commits ahead of `upstream` as last fetched here (with `submodules yes`, add: "I didn't check the submodules"). Tell me what you'd like to change next. |
 
 4. Never carry out the step yourself from this skill, even when asked to in the same message: say what it will do,
    and ask before doing anything. Don't read `.env` files or print tokens, keys or passwords.

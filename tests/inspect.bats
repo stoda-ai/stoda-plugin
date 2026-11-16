@@ -50,7 +50,8 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   [ "${lines[4]}" = "github none" ]
   [ "${lines[5]}" = "upstream none" ]
   [ "${lines[6]}" = "changes 0" ]
-  [ "${lines[7]}" = "unpushed no-upstream" ]
+  [ "${lines[7]}" = "submodules no" ]
+  [ "${lines[8]}" = "unpushed no-upstream" ]
 }
 
 @test "GitHub remotes in https, ssh and scp form give owner/repo; anything else is other" {
@@ -77,7 +78,7 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   git commit -q --allow-empty -m two
   run "$inspect"
   [ "${lines[6]}" = "changes 2" ]
-  [ "${lines[7]}" = "unpushed 1" ]
+  [ "${lines[8]}" = "unpushed 1" ]
   git checkout -q --detach HEAD
   run "$inspect"
   [ "${lines[3]}" = "branch detached" ]
@@ -165,9 +166,22 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
 
 @test "the guide claims a push only with an upstream, and treats unknown as unknown" {
   skill=$BATS_TEST_DIRNAME/../plugins/stoda/skills/guide/SKILL.md
-  grep -q '| otherwise | Everything is committed and pushed to `upstream`.' "$skill"
+  grep -q '| otherwise | Everything is committed, with no commits ahead of `upstream` as last fetched here' "$skill"
   grep -q '`unpushed` above 0, or `upstream none` | Push this branch.' "$skill"
   grep -q 'never treat it as zero' "$skill"
   run grep -c 'on GitHub\.' "$skill"
   [ "$output" = 0 ]
+}
+
+@test "submodules are flagged as not inspected, and a broken upstream is unknown, not none" {
+  repo
+  git init -q "$BATS_TEST_TMPDIR/sub" && (cd "$BATS_TEST_TMPDIR/sub" && git commit -q --allow-empty -m s)
+  git -c protocol.file.allow=always submodule -q add "$BATS_TEST_TMPDIR/sub" sub
+  git commit -q -m sub
+  run "$inspect"
+  grep -qx 'submodules yes' <<< "$output"
+  git config branch.main.remote origin
+  git config branch.main.merge refs/heads/main
+  run "$inspect"
+  grep -qx 'upstream unknown' <<< "$output"
 }

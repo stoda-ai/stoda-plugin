@@ -3,3 +3,6 @@ release-gates-open: these must be done before a release; remove this file in a r
 - Approved Stoda logo/icon added, or a decision to release without one.
 - README wording and the first skill reviewed for release.
 - Exact release bytes, security and provenance reviewed; public install and update proven from the published repo.
+- The guide's read-only promise in a live session: skill tool declarations pre-approve but don't restrict, so check
+  (or enforce) that the guide can't run other commands; and decide how to treat clean/smudge filters a repository
+  configures, which `git status` can run (Codex review 14, P1).

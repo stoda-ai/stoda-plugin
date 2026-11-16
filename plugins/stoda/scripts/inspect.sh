@@ -6,10 +6,12 @@
 #   plugin <version>                       the installed stoda plugin's version
 #   folder <name>                          the current folder's name (not its full path)
 #   repo yes|no|unknown                    whether the folder is inside a git working tree
-#   branch <name>|detached                 (repo yes only)
+#   branch <name>|detached|unknown         (repo yes only)
 #   github <owner/repo>|none|other         origin's GitHub repository, none without origin, other off GitHub
-#   upstream <remote>/<branch>|none        the branch's upstream, if it has one
-#   changes <n>|unknown                    uncommitted changes: modified, staged and untracked paths
+#   upstream <remote>/<branch>|none|unknown  the branch's locally recorded upstream, if it has one
+#   changes <n>|unknown                    uncommitted changes: modified, staged and untracked paths (submodules
+#                                          not inspected)
+#   submodules yes|no                      whether the repository has submodules, whose own changes aren't counted
 #   unpushed <n>|no-upstream|unknown       commits on this branch not on its upstream
 #   tool git|gh yes|no                     whether the command is installed
 #   gh-auth signed-in|signed-out|no-gh     GitHub CLI sign-in, from `gh auth status`'s exit code only
@@ -33,7 +35,9 @@ if has git; then
 fi
 echo "repo $inside"
 if [[ $inside == yes ]]; then
-  if branch=$(g symbolic-ref -q --short HEAD); then echo "branch $branch"; else echo "branch detached"; fi
+  rc=0
+  branch=$(g symbolic-ref -q --short HEAD) || rc=$?
+  case $rc in 0) echo "branch $branch" ;; 1) echo "branch detached" ;; *) echo "branch unknown" ;; esac
   if url=$(g remote get-url origin 2>/dev/null); then
     slug=$(printf '%s\n' "$url" | sed -nE 's#^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+)$#\2#p')
     slug=${slug%.git}
@@ -43,6 +47,9 @@ if [[ $inside == yes ]]; then
   fi
   if up=$(g rev-parse -q --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null); then
     echo "upstream $up"
+  elif [[ -n "${branch:-}" ]] && g config --get "branch.$branch.merge" >/dev/null 2>&1; then
+    up=
+    echo "upstream unknown"
   else
     up=
     echo "upstream none"
@@ -51,6 +58,11 @@ if [[ $inside == yes ]]; then
     if [[ -z "$status" ]]; then echo "changes 0"; else echo "changes $(printf '%s\n' "$status" | wc -l | tr -d ' ')"; fi
   else
     echo "changes unknown"
+  fi
+  if [[ -e .gitmodules || -n "$(g ls-files -s 2>/dev/null | awk '$1 == "160000" {print; exit}')" ]]; then
+    echo "submodules yes"
+  else
+    echo "submodules no"
   fi
   if [[ -z "$up" ]]; then
     echo "unpushed no-upstream"
