@@ -6,7 +6,7 @@ validate:
     claude plugin validate --strict plugins/stoda
 
 lint:
-    shellcheck -x scripts/*.sh
+    shellcheck -x scripts/*.sh plugins/stoda/scripts/*.sh
 
 bats:
     bats tests

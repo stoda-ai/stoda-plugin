@@ -1,7 +1,7 @@
 {
   "name": "stoda",
-  "version": "0.1.2",
-  "description": "Stoda skills for Claude Code. Pre-release: no skills yet.",
+  "version": "0.1.3",
+  "description": "Stoda skills for Claude Code. Pre-release: one read-only skill, guide, that shows where you are and one next step.",
   "author": { "name": "Stoda" },
   "license": "MIT"
 }

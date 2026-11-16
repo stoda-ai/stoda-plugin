@@ -4,8 +4,10 @@ The Stoda plugin for Claude Code, and the marketplace it is installed from.
 
 ## Status
 
-Pre-release. The plugin has no skills yet; the first one is being designed. Nothing here is published, and this
-README describes how installing and updating will work once it is.
+Pre-release. The plugin has one skill, `guide`: ask "where am I?" or "what's next?" (or run `/stoda:guide`) and it
+reads the current folder, its git repository and your GitHub CLI sign-in, without changing anything, and gives one
+next step. It never makes changes itself. Nothing here is published yet; this README describes how installing and
+updating will work once it is.
 
 Not done yet, so no release is made (`RELEASE-HOLD` lists each): the verified copyright holder in `LICENSE`, an
 approved Stoda logo and plugin icon, and review of this README and the first skill.
