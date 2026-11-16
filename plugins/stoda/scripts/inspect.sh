@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# The guide's read-only inspection of where the builder is. It writes nothing itself: no file, git index or lock
-# (GIT_OPTIONAL_LOCKS=0), no fsmonitor hook or daemon (core.fsmonitor=false), no submodule recursion, and no temporary
-# file (no here-strings, which bash 3.2 backs with a temp file). Limit: a clean/smudge filter the repository itself
-# configures can still run when git compares a file's content. One `<fact> <value>` line each:
+# The guide's read-only inspection of where the builder is. It reads only refs, config and the index, never file
+# contents: no `git status` or diff, so no clean/smudge filter, fsmonitor hook or submodule command a repository
+# configures ever runs, and uncommitted files are not inspected. It writes nothing: no file, git index or lock
+# (GIT_OPTIONAL_LOCKS=0) and no temporary file (no here-strings, which bash 3.2 backs with a temp file).
+# One `<fact> <value>` line each:
 #   plugin <version>                       the installed stoda plugin's version
 #   folder <name>                          the current folder's name (not its full path)
 #   repo yes|no|unknown                    whether the folder is inside a git working tree
 #   branch <name>|detached|unknown         (repo yes only)
 #   github <owner/repo>|none|other         origin's GitHub repository, none without origin, other off GitHub
 #   upstream <remote>/<branch>|none|unknown  the branch's locally recorded upstream, if it has one
-#   changes <n>|unknown                    uncommitted changes: modified, staged and untracked paths (submodules
-#                                          not inspected)
-#   submodules yes|no                      whether the repository has submodules, whose own changes aren't counted
+#   submodules yes|no                      whether the repository has submodules
 #   unpushed <n>|no-upstream|unknown       commits on this branch not on its upstream
 #   tool git|gh yes|no                     whether the command is installed
 #   gh-auth signed-in|signed-out|no-gh     GitHub CLI sign-in, from `gh auth status`'s exit code only
@@ -53,11 +52,6 @@ if [[ $inside == yes ]]; then
   else
     up=
     echo "upstream none"
-  fi
-  if status=$(g status --porcelain --untracked-files=normal --ignore-submodules=all 2>/dev/null); then
-    if [[ -z "$status" ]]; then echo "changes 0"; else echo "changes $(printf '%s\n' "$status" | wc -l | tr -d ' ')"; fi
-  else
-    echo "changes unknown"
   fi
   if [[ -e .gitmodules || -n "$(g ls-files -s 2>/dev/null | awk '$1 == "160000" {print; exit}')" ]]; then
     echo "submodules yes"

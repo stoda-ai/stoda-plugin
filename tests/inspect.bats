@@ -49,9 +49,8 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   [ "${lines[3]}" = "branch main" ]
   [ "${lines[4]}" = "github none" ]
   [ "${lines[5]}" = "upstream none" ]
-  [ "${lines[6]}" = "changes 0" ]
-  [ "${lines[7]}" = "submodules no" ]
-  [ "${lines[8]}" = "unpushed no-upstream" ]
+  [ "${lines[6]}" = "submodules no" ]
+  [ "${lines[7]}" = "unpushed no-upstream" ]
 }
 
 @test "GitHub remotes in https, ssh and scp form give owner/repo; anything else is other" {
@@ -68,7 +67,7 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   done
 }
 
-@test "uncommitted and unpushed work are counted, and a detached HEAD is named" {
+@test "unpushed commits are counted, uncommitted files aren't inspected, and a detached HEAD is named" {
   repo
   git init -q --bare "$BATS_TEST_TMPDIR/remote.git"
   git remote add origin "$BATS_TEST_TMPDIR/remote.git"
@@ -77,8 +76,9 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   printf 'new\n' > b.txt
   git commit -q --allow-empty -m two
   run "$inspect"
-  [ "${lines[6]}" = "changes 2" ]
-  [ "${lines[8]}" = "unpushed 1" ]
+  [ "${lines[7]}" = "unpushed 1" ]
+  run grep -c '^changes ' <<< "$output"
+  [ "$output" = 0 ]
   git checkout -q --detach HEAD
   run "$inspect"
   [ "${lines[3]}" = "branch detached" ]
@@ -110,12 +110,13 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   [ ! -e .git/index.lock ]
 }
 
-# Declarations only: allowed-tools pre-approves, it doesn't restrict (other Bash commands still follow the session's
-# permissions). Enforcement in a live session is a separate, open check.
-@test "the guide skill pre-approves only the inspector and removes the file-editing tools" {
+# The model gets no tools while the guide is active: the inspector runs by injection when the skill loads. Whether
+# the client honours this is checked in a live session (see RELEASE-HOLD); this checks the declarations match it.
+@test "the guide runs only the inspector by injection and removes every acting tool" {
   skill=$BATS_TEST_DIRNAME/../plugins/stoda/skills/guide/SKILL.md
+  grep -qx '!`${CLAUDE_PLUGIN_ROOT}/scripts/inspect.sh`' "$skill"
   grep -qx 'allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/inspect.sh)' "$skill"
-  grep -qx 'disallowed-tools: Write, Edit, NotebookEdit' "$skill"
+  grep -qx 'disallowed-tools: Bash, Write, Edit, NotebookEdit, Read, Glob, Grep, WebFetch, WebSearch, Agent, Task' "$skill"
   run grep -c 'scripts/' "$skill"
   [ "$output" -eq 2 ]
 }
@@ -138,17 +139,34 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   [ ! -e "$BATS_TEST_TMPDIR/hook-ran" ]
 }
 
-@test "facts it can't read are unknown, never clean; inside .git is not a working tree" {
+@test "inside .git is not a working tree, and nothing about the repo is reported there" {
   repo
-  printf 'garbage' > .git/index
-  run "$inspect"
-  [ "${lines[2]}" = "repo yes" ]
-  grep -qx 'changes unknown' <<< "$output"
   cd .git
   run "$inspect"
   [ "${lines[2]}" = "repo no" ]
-  run grep -c -e '^branch ' -e '^changes ' <<< "$output"
+  run grep -c -e '^branch ' -e '^unpushed ' <<< "$output"
   [ "$output" = 0 ]
+}
+
+# Codex review 14 P1: a clean filter the repository configures must never run, because nothing reads file contents.
+@test "a repository-configured clean filter never runs" {
+  repo
+  printf '#!/bin/sh\ntouch "%s/filter-ran"\ncat\n' "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/filter"
+  chmod +x "$BATS_TEST_TMPDIR/filter"
+  git config filter.spy.clean "$BATS_TEST_TMPDIR/filter"
+  printf '*.txt filter=spy\n' > .gitattributes
+  git add .gitattributes && git commit -q -m attrs
+  # Same size, new time: git can only tell by reading the content, which runs the clean filter.
+  sleep 1
+  printf 'jello\n' > a.txt
+  git -c core.fsmonitor=false status --porcelain >/dev/null
+  [ -e "$BATS_TEST_TMPDIR/filter-ran" ] || skip "this git didn't run the filter for status; nothing to compare"
+  rm "$BATS_TEST_TMPDIR/filter-ran"
+  sleep 1
+  printf 'hello\n' > a.txt
+  run "$inspect"
+  [ "$status" -eq 0 ]
+  [ ! -e "$BATS_TEST_TMPDIR/filter-ran" ]
 }
 
 @test "the upstream is reported, and a repo without one has no unpushed count" {
@@ -164,9 +182,10 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   grep -qx 'unpushed 0' <<< "$output"
 }
 
-@test "the guide claims a push only with an upstream, and treats unknown as unknown" {
+@test "the guide claims nothing about uncommitted files or GitHub, and treats unknown as unknown" {
   skill=$BATS_TEST_DIRNAME/../plugins/stoda/skills/guide/SKILL.md
-  grep -q '| otherwise | Everything is committed, with no commits ahead of `upstream` as last fetched here' "$skill"
+  grep -q '| otherwise | No commits are waiting to be pushed to `upstream` (as last fetched here' "$skill"
+  grep -q "you didn't look at uncommitted" "$skill"
   grep -q '`unpushed` above 0, or `upstream none` | Push this branch.' "$skill"
   grep -q 'never treat it as zero' "$skill"
   run grep -c 'on GitHub\.' "$skill"
