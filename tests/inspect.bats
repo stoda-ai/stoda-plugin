@@ -200,6 +200,15 @@ snapshot() { (cd "$app" && find . -print0 | LC_ALL=C sort -z | xargs -0 ls -ld |
   git commit -q -m sub
   run "$inspect"
   grep -qx 'submodules yes' <<< "$output"
+  mkdir -p deep/er && cd deep/er
+  run "$inspect"
+  grep -qx 'submodules yes' <<< "$output"
+  cd ../..
+  cp .git/index "$BATS_TEST_TMPDIR/index.bak"
+  printf 'garbage' > .git/index
+  run "$inspect"
+  grep -qx 'submodules unknown' <<< "$output"
+  cp "$BATS_TEST_TMPDIR/index.bak" .git/index
   git config branch.main.remote origin
   git config branch.main.merge refs/heads/main
   run "$inspect"

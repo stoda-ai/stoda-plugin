@@ -10,7 +10,7 @@
 #   branch <name>|detached|unknown         (repo yes only)
 #   github <owner/repo>|none|other         origin's GitHub repository, none without origin, other off GitHub
 #   upstream <remote>/<branch>|none|unknown  the branch's locally recorded upstream, if it has one
-#   submodules yes|no                      whether the repository has submodules
+#   submodules yes|no|unknown              whether the repository has submodules (checked from its root)
 #   unpushed <n>|no-upstream|unknown       commits on this branch not on its upstream
 #   tool git|gh yes|no                     whether the command is installed
 #   gh-auth signed-in|signed-out|no-gh     GitHub CLI sign-in, from `gh auth status`'s exit code only
@@ -53,7 +53,10 @@ if [[ $inside == yes ]]; then
     up=
     echo "upstream none"
   fi
-  if [[ -e .gitmodules || -n "$(g ls-files -s 2>/dev/null | awk '$1 == "160000" {print; exit}')" ]]; then
+  # From the repository root, so a nested folder doesn't hide submodules elsewhere; a failed read is unknown.
+  if ! top=$(g rev-parse --show-toplevel 2>/dev/null) || ! index=$(g -C "$top" ls-files -s 2>/dev/null); then
+    echo "submodules unknown"
+  elif [[ -e "$top/.gitmodules" ]] || printf '%s\n' "$index" | awk '$1 == "160000" {found = 1} END {exit !found}'; then
     echo "submodules yes"
   else
     echo "submodules no"

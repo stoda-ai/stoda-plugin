@@ -31,7 +31,7 @@ Each line above is `<fact> <value>`. Use only those facts.
    | `github none` | This repository isn't connected to GitHub yet. |
    | `unpushed` above 0, or `upstream none` | Push this branch. |
    | `tool gh no` or `gh-auth signed-out` | Sign in to GitHub: run `gh auth login` in your terminal. |
-   | otherwise | No commits are waiting to be pushed to `upstream` (as last fetched here; with `submodules yes`, add "I didn't check the submodules"). Tell me what you'd like to change next. |
+   | otherwise | No commits are waiting to be pushed to `upstream` (as last fetched here; with `submodules` `yes` or `unknown`, add "I didn't check the submodules"). Tell me what you'd like to change next. |
 
 3. Don't carry out the step: say what it would do, and that the person can ask for it next. Never print tokens, keys
    or passwords.

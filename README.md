@@ -38,8 +38,8 @@ CI refuses a pull request that changes anything users receive (`release-surface`
 Run `/plugin marketplace update stoda` (or turn on auto-update for the `stoda` marketplace in `/plugin`) to pick up
 a new version.
 
-Each released version is tagged `stoda--v<version>` on the commit it was released from. To stay on one version, add
-the marketplace at that tag instead: `/plugin marketplace add stoda-ai/stoda-plugin#stoda--v<version>`.
+Each released version is also tagged `stoda--v<version>` on the commit it was released from, as a record. The
+catalog installs from `release`, so pinning the marketplace to a tag doesn't pin the plugin.
 
 ## What this repository holds
 
