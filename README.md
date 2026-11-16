@@ -7,6 +7,9 @@ The Stoda plugin for Claude Code, and the marketplace it is installed from.
 Pre-release. The plugin has no skills yet; the first one is being designed. Nothing here is published, and this
 README describes how installing and updating will work once it is.
 
+Not approved yet, and so not included: the license, the Stoda logo and plugin icon, and the wording of this README.
+Until they are approved and added, no release is made (`RELEASE-HOLD`).
+
 ## Install
 
 In Claude Code:

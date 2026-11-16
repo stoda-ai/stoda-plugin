@@ -1,6 +1,6 @@
 {
   "name": "stoda",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Stoda skills for Claude Code. Pre-release: no skills yet.",
   "author": { "name": "Stoda" }
 }

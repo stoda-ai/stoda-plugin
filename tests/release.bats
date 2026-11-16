@@ -126,3 +126,12 @@ commit() { git add -A; git commit -q -m "${1:-change}"; }
   [ -f "$BATS_TEST_DIRNAME/../RELEASE-HOLD" ]
   [ ! -e "$BATS_TEST_DIRNAME/../LICENSE" ]
 }
+
+@test "shrinking the release surface itself needs a new version" {
+  base=$(git rev-parse HEAD)
+  grep -v '^README.md$' release-surface > rs && mv rs release-surface
+  printf 'more\n' >> README.md; commit
+  run scripts/check-version.sh "$base"
+  [ "$status" -eq 1 ]
+  [ "$output" = "error version-not-raised 0.1.0" ]
+}
