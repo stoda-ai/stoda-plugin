@@ -238,7 +238,7 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
 # doesn't exist before the first release, so an install fails closed rather than taking untested code.
 @test "the catalog's plugin entry installs only from the release branch of this repository" {
   cat=$BATS_TEST_DIRNAME/../.claude-plugin/marketplace.json
-  [ "$(jq -c '[.plugins[] | .source]' "$cat")" = '[{"source":"github","repo":"stoda-ai/stoda-plugin","ref":"release"}]' ]
+  [ "$(jq -c '[.plugins[] | .source]' "$cat")" = '[{"source":"git-subdir","url":"stoda-ai/stoda-plugin","path":"plugins/stoda","ref":"release"}]' ]
   run jq -e '[.plugins[] | .source | strings] | length == 0' "$cat"
   [ "$status" -eq 0 ]
 }
