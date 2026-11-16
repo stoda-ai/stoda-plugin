@@ -1,0 +1,12 @@
+{
+  "name": "stoda",
+  "description": "Stoda plugins for Claude Code",
+  "owner": { "name": "Stoda" },
+  "plugins": [
+    {
+      "name": "stoda",
+      "source": "./plugins/stoda",
+      "description": "Stoda skills for Claude Code"
+    }
+  ]
+}

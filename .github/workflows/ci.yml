@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: just
+      - run: sudo apt-get update && sudo apt-get install -y bats shellcheck jq
+      - run: npm install -g @anthropic-ai/claude-code@2.1.326
+      - run: just test
+      - name: plugin version went up
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: scripts/check-version.sh "origin/$BASE_REF"
+
+  # Merge to main is the publish event: users install from main. This job only records the release with a tag
+  # (stoda--v<version>), after `test` passed on that exact commit, one run at a time, never moving a tag.
+  release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: tag the release
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          out=$(scripts/tag-release.sh "$SHA")
+          echo "$out"
+          case $out in
+            tagged*) git push origin "refs/tags/$(cut -d' ' -f2 <<< "$out")" ;;
+          esac
