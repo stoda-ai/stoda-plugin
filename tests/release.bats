@@ -242,3 +242,12 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   run jq -e '[.plugins[] | .source | strings] | length == 0' "$cat"
   [ "$status" -eq 0 ]
 }
+
+# The installed plugin is only plugins/stoda, so it must carry the license itself: a regular file identical to the
+# canonical root LICENSE (the one place it is edited), not a symlink out of the plugin.
+@test "the plugin carries the same LICENSE as the repository, as a regular file" {
+  root=$BATS_TEST_DIRNAME/..
+  [ -f "$root/plugins/stoda/LICENSE" ] && [ ! -L "$root/plugins/stoda/LICENSE" ]
+  cmp "$root/LICENSE" "$root/plugins/stoda/LICENSE"
+  grep -qx 'Copyright (c) 2026 Stoda' "$root/LICENSE"
+}

@@ -6,9 +6,10 @@ The [Stoda](https://stoda.ai) plugin for Claude Code, and the marketplace it is 
 
 Pre-release. The plugin has one skill, `guide`: ask "where am I?" or "what's next?" (or run `/stoda:guide`) and it
 reads the current folder, its git repository and your GitHub CLI sign-in, without changing anything, and gives one
-next step. It never makes changes itself: for the turn it answers, its shell, file, web and subagent tools are
-removed (a request to run a command in that turn is denied). This is guidance, not a security sandbox; on your next
-message Claude has its usual tools and permissions again.
+next step. It never makes changes itself. For the turn it answers it removes Claude Code's shell, file, web and
+subagent tools (Bash, Write, Edit, NotebookEdit, Read, Glob, Grep, WebFetch, WebSearch, Agent, Task); tools from MCP
+servers you have connected are not removed, and the guide is only instructed not to use them. This is guidance, not a
+security sandbox; on your next message Claude has its usual tools and permissions again.
 
 Unreleased: nothing can be installed until the first release (`RELEASE-HOLD` lists what is left before it).
 
@@ -47,7 +48,8 @@ them at run time from outside the plugin.
 
 ## License
 
-MIT, copyright Stoda (`LICENSE`), for the Stoda-owned code, skills and configuration in this repository. It doesn't
+MIT, copyright Stoda (`LICENSE`, repeated as `plugins/stoda/LICENSE` so it ships with the installed plugin), for the
+Stoda-owned code, skills and configuration in this repository. It doesn't
 relicense anything a third party owns: such files keep their own license and notices. It grants no rights to the Stoda
 name or logo. No logo is included yet.
 

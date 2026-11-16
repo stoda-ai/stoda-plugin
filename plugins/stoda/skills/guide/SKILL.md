@@ -4,8 +4,8 @@ description: "Where am I and what should I do next? Reads this folder, its git r
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/inspect.sh)
 disallowed-tools: Bash, Write, Edit, NotebookEdit, Read, Glob, Grep, WebFetch, WebSearch, Agent, Task
 ---
-This skill only reads. It gives guidance; it doesn't act, and for this turn its acting tools are removed. The
-inspection already ran:
+This skill only reads. It gives guidance; it doesn't act: don't call any tool, including MCP tools (Claude Code's
+built-in shell, file, web and subagent tools are removed for this turn). The inspection already ran:
 
 !`${CLAUDE_PLUGIN_ROOT}/scripts/inspect.sh`
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The release job: publishes one commit of main, after CI's `test` passed on it. Users install from the `release`
-# branch (the repository's default branch), never from main, so nothing reaches them until this runs.
+# branch, never from main, so nothing reaches them until this runs.
 #   1. release-gate.sh: refuses while RELEASE-HOLD exists or LICENSE is missing (nothing is pushed)
 #   2. tag-release.sh: tags stoda--v<version> once, or finds that version already released with nothing users
 #      receive changed since; refuses otherwise
