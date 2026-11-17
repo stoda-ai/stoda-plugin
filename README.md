@@ -11,8 +11,6 @@ subagent tools (Bash, Write, Edit, NotebookEdit, Read, Glob, Grep, WebFetch, Web
 servers you have connected are not removed, and the guide is only instructed not to use them. This is guidance, not a
 security sandbox; on your next message Claude has its usual tools and permissions again.
 
-Unreleased: nothing can be installed until the first release (`RELEASE-HOLD` lists what is left before it).
-
 ## Install
 
 In Claude Code:
