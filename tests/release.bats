@@ -182,7 +182,7 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
 @test "the workflow publishes only through publish.sh after test, on main, without swallowing failures" {
   wf=$BATS_TEST_DIRNAME/../.github/workflows/ci.yml
   job=$(awk '/^  release:/{f=1} f' "$wf")
-  grep -qx '    needs: test' <<< "$job"
+  grep -qxF '    needs: [test, release-ready]' <<< "$job"
   grep -qx "    if: github.event_name == 'push' && github.ref == 'refs/heads/main'" <<< "$job"
   grep -qx '      cancel-in-progress: false' <<< "$job"
   [ "$(grep -c 'scripts/publish.sh' <<< "$job")" -eq 1 ]
@@ -250,4 +250,15 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   [ -f "$root/plugins/stoda/LICENSE" ] && [ ! -L "$root/plugins/stoda/LICENSE" ]
   cmp "$root/LICENSE" "$root/plugins/stoda/LICENSE"
   grep -qx 'Copyright (c) 2026 Stoda' "$root/LICENSE"
+}
+
+# The check the release branch's ruleset requires: it runs on every event (never skipped, which a required check would
+# treat as passing) and its only command is the gate, so it fails while held.
+@test "the release-ready job always runs the release gate and never skips" {
+  wf=$BATS_TEST_DIRNAME/../.github/workflows/ci.yml
+  job=$(awk '/^  release-ready:/{f=1; print; next} f && /^  [a-z]/{exit} f' "$wf")
+  [ -n "$job" ]
+  run grep -n -e '^    if:' -e 'continue-on-error' -e '|| true' <<< "$job"
+  [ "$status" -eq 1 ]
+  grep -qx '      - run: scripts/release-gate.sh HEAD' <<< "$job"
 }
