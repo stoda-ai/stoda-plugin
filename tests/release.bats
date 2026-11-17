@@ -276,56 +276,105 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   [ "$output" = "not-ready held release-gates-open" ]
 }
 
-# promote.sh: an admin's manual release, refused unless the commit is on main and CI's push run on main for that exact
-# commit has `test` and `release-ready` green. `gh` is a stub that returns what `gh api --jq` would print.
+# promote.sh: an admin's manual release. `gh` is a stub that applies the script's own --jq filter to raw API JSON
+# (GH_RUNS_JSON, GH_JOBS_JSON), records each endpoint, and fails when GH_FAIL is set; so the filtering is what's tested.
 promote_setup() {
   git --git-dir="$remote" config receive.denyNonFastForwards true
   git push -q "$remote" HEAD:refs/heads/main
-  git remote add origin "$remote"
   stub=$BATS_TEST_TMPDIR/stub
   mkdir -p "$stub"
-  printf '#!/usr/bin/env bash\ncase "$2" in\n  *"/runs?"*) printf "%%s" "${GH_RUNS-}" ;;\n  *"/jobs?"*) printf "%%s" "${GH_JOBS-}" ;;\n  *) exit 9 ;;\nesac\n' > "$stub/gh"
+  cat > "$stub/gh" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = api ] && [ "$3" = --jq ] || exit 9
+printf '%s\n' "$2" >> "$BATS_TEST_TMPDIR/gh-calls"
+[ -z "${GH_FAIL-}" ] || exit 1
+case $2 in
+  *"/runs?"*) jq -r "$4" <<< "${GH_RUNS_JSON:-{\"workflow_runs\": []\}}" ;;
+  *"/jobs?"*) jq -r "$4" <<< "${GH_JOBS_JSON:-{\"jobs\": []\}}" ;;
+  *) exit 9 ;;
+esac
+STUB
   chmod +x "$stub/gh"
   export PATH=$stub:$PATH
+  # The release location, for the test only: the copy expects origin to be this bare remote instead of GitHub.
+  # (where() drops a trailing .git, as GitHub URLs may or may not carry it.)
+  sed -i.bak "s#^want=\"github.com/\$REPO\"#want=\"${remote%.git}\"#" scripts/promote.sh && rm scripts/promote.sh.bak
+  grep -q "^want=\"${remote%.git}\"" scripts/promote.sh
+  git remote add origin "$remote"
 }
 
-@test "promote refuses a short sha, a commit not on main, no main push run, or a run that isn't green" {
-  promote_setup
+run_json() { # run_json <id> <sha> [event] [branch] [path] [repo] [status]
+  printf '{"id": %s, "head_sha": "%s", "event": "%s", "head_branch": "%s", "path": "%s", "repository": {"full_name": "%s"}, "status": "%s"}' \
+    "$1" "$2" "${3:-push}" "${4:-main}" "${5:-.github/workflows/ci.yml}" "${6:-stoda-ai/stoda-plugin}" "${7:-completed}"
+}
+jobs_json() { # jobs_json <run> <sha> <test-conclusion> <ready-conclusion>
+  printf '{"jobs": [{"run_id": %s, "head_sha": "%s", "name": "test", "conclusion": "%s"}, {"run_id": %s, "head_sha": "%s", "name": "release-ready", "conclusion": "%s"}]}' \
+    "$1" "$2" "$3" "$1" "$2" "$4"
+}
+
+@test "promote refuses an origin, or any push URL, that isn't the release repository, before fetching" {
   sha=$(git rev-parse HEAD)
+  git remote add origin https://github.com/someone/fork.git
+  run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "$output" = "refused origin-not-stoda-ai/stoda-plugin" ]
+  git remote set-url origin git@github.com:stoda-ai/stoda-plugin.git
+  git remote set-url --add --push origin https://github.com/stoda-ai/stoda-plugin.git
+  git remote set-url --add --push origin https://github.com/someone/fork.git
+  run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "$output" = "refused push-url-not-stoda-ai/stoda-plugin" ]
   run scripts/promote.sh "${sha:0:12}"
   [ "$status" -eq 2 ]
-  git switch -q -c side; printf 'x\n' > docs/side.md; commit
-  run scripts/promote.sh "$(git rev-parse HEAD)" o/r origin
-  [ "$status" -eq 1 ]
-  [ "$output" = "refused not-on-main" ]
-  git switch -q main 2>/dev/null || git switch -q -
-  GH_RUNS= run scripts/promote.sh "$sha" o/r origin
-  [ "$status" -eq 1 ]
-  [ "${lines[1]}" = "refused no-main-push-run" ]
-  GH_RUNS=42 GH_JOBS="release-ready=failure test=success" run scripts/promote.sh "$sha" o/r origin
-  [ "$status" -eq 1 ]
-  [ "${lines[1]}" = "refused ci-not-green run 42: release-ready=failure test=success" ]
-  GH_RUNS=42 GH_JOBS="test=success" run scripts/promote.sh "$sha" o/r origin
-  [ "$status" -eq 1 ]
-  [ -z "$(remote_ref refs/heads/release)" ]
-  [ -z "$(git tag)" ]
 }
 
-@test "promote releases a green main commit: release branch and tag move together, and the gate still applies" {
+@test "promote refuses a commit not on main, an API error, and runs that aren't this repo's ci push on main" {
   promote_setup
   sha=$(git rev-parse HEAD)
-  GH_RUNS=$'43\n42' GH_JOBS="release-ready=success test=success" run scripts/promote.sh "$sha" o/r origin
+  git switch -q -c side; printf 'x\n' > docs/side.md; commit
+  run scripts/promote.sh "$(git rev-parse HEAD)"
+  [ "$status" -eq 1 ]
+  [ "$output" = "refused not-on-main" ]
+  GH_FAIL=1 run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused ci-unreadable" ]
+  other=$(git rev-parse HEAD)
+  GH_RUNS_JSON="{\"workflow_runs\": [$(run_json 1 "$sha" pull_request), $(run_json 2 "$sha" push side), $(run_json 3 "$sha" push main .github/workflows/other.yml), $(run_json 4 "$sha" push main .github/workflows/ci.yml someone/fork), $(run_json 5 "$other"), $(run_json 6 "$sha" push main .github/workflows/ci.yml stoda-ai/stoda-plugin in_progress)]}" \
+    run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused no-main-push-run" ]
+  grep -q "^repos/stoda-ai/stoda-plugin/actions/runs?head_sha=$sha&event=push&branch=main&status=completed" "$BATS_TEST_TMPDIR/gh-calls"
+}
+
+@test "promote uses the newest green ci push run, and refuses one whose jobs aren't both green" {
+  promote_setup
+  sha=$(git rev-parse HEAD)
+  runs="{\"workflow_runs\": [$(run_json 41 "$sha"), $(run_json 43 "$sha"), $(run_json 42 "$sha")]}"
+  GH_RUNS_JSON=$runs GH_JOBS_JSON=$(jobs_json 43 "$sha" success failure) run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused ci-not-green run 43: release-ready=failure test=success" ]
+  GH_RUNS_JSON=$runs GH_JOBS_JSON=$(jobs_json 99 "$sha" success success) run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused ci-not-green run 43: no jobs" ]
+  [ -z "$(remote_ref refs/heads/release)" ]
+  [ -z "$(git tag)" ]
+  GH_RUNS_JSON=$runs GH_JOBS_JSON=$(jobs_json 43 "$sha" success success) run scripts/promote.sh "$sha"
   [ "$status" -eq 0 ] || { echo "$output"; false; }
-  [ "${lines[0]}" = "on-main $sha" ]
   [ "${lines[1]}" = "ci-green run 43" ]
   [ "${lines[${#lines[@]}-1]}" = "published $sha" ]
   [ "$(remote_ref refs/heads/release)" = "$sha" ]
   [ "$(remote_ref 'refs/tags/stoda--v0.1.0^{commit}')" = "$sha" ]
+  grep -q "^repos/stoda-ai/stoda-plugin/actions/runs/43/jobs" "$BATS_TEST_TMPDIR/gh-calls"
+}
+
+@test "promote still applies the release gate to a green main commit" {
+  promote_setup
   printf 'release-gates-open: reason\n' > RELEASE-HOLD; commit
   git push -q origin HEAD:refs/heads/main
-  held=$(git rev-parse HEAD)
-  GH_RUNS=44 GH_JOBS="release-ready=success test=success" run scripts/promote.sh "$held" o/r origin
+  sha=$(git rev-parse HEAD)
+  GH_RUNS_JSON="{\"workflow_runs\": [$(run_json 7 "$sha")]}" GH_JOBS_JSON=$(jobs_json 7 "$sha" success success) \
+    run scripts/promote.sh "$sha"
   [ "$status" -eq 1 ]
   [ "${lines[${#lines[@]}-1]}" = "held release-gates-open" ]
-  [ "$(remote_ref refs/heads/release)" = "$sha" ]
+  [ -z "$(remote_ref refs/heads/release)" ]
 }

@@ -37,7 +37,8 @@ admin releases a commit by hand:
 scripts/promote.sh <40-character commit of main>
 ```
 
-It refuses unless the commit is on `main` and CI's run for that push to `main`, at that exact commit, has `test` and
+It works only on `stoda-ai/stoda-plugin` (the `origin` remote's fetch and push URLs must both be it). It refuses unless
+the commit is on `main` and this repository's CI run for that push to `main`, at that exact commit, has `test` and
 `release-ready` green; then it tags the version once and moves `release` to the commit with that tag in one
 fast-forward-only push. Only repository admins may create or move `release` and create version tags; `release` can't
 be force-pushed or deleted, and tags can't be moved or deleted. Releases therefore rely on repository admins being
