@@ -31,17 +31,18 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: scripts/check-version.sh "origin/$BASE_REF"
 
-  # Whether this commit may be released: RELEASE-HOLD absent and LICENSE complete (release-gate.sh). It runs on every
-  # pull request and push, with no `if`, so it is never "skipped" (which a required check would count as passing), and
-  # it fails while held. The `release` branch's ruleset requires it and `test`, from GitHub Actions, on any commit
-  # pushed there; it doesn't depend on the release job's own result.
+  # Whether this commit may be released (release-ready.sh): only a push to main whose commit passes the release gate
+  # (RELEASE-HOLD absent, LICENSE complete). It runs on every pull request and push, with no `if`, so it is never
+  # "skipped" (which a required check would count as passing); on a pull request it fails, so a PR's head commit never
+  # carries a successful release-ready. The `release` branch's ruleset requires it and `test`, from GitHub Actions, on
+  # any commit pushed there; it doesn't depend on the release job's own result.
   release-ready:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: scripts/release-gate.sh HEAD
+      - run: scripts/release-ready.sh HEAD
 
   # Users install from the `release` branch, never from main: merging to main publishes nothing. After `test` passed on
   # this exact commit, publish.sh opens the release gate (RELEASE-HOLD, LICENSE), tags a new version once, and moves

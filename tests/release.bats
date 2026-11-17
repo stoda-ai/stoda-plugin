@@ -11,7 +11,7 @@ setup() {
   git config --global commit.gpgsign false
   repo=$BATS_TEST_TMPDIR/repo
   mkdir -p "$repo/plugins/stoda/.claude-plugin" "$repo/scripts" "$repo/docs" "$repo/.claude-plugin"
-  for s in check-version tag-release release-gate publish; do cp "$BATS_TEST_DIRNAME/../scripts/$s.sh" "$repo/scripts/"; done
+  for s in check-version tag-release release-gate release-ready publish; do cp "$BATS_TEST_DIRNAME/../scripts/$s.sh" "$repo/scripts/"; done
   cp "$BATS_TEST_DIRNAME/../scripts/release-lib.sh" "$BATS_TEST_DIRNAME/../release-surface" "$repo/"
   mv "$repo/release-lib.sh" "$repo/scripts/"
   printf '# readme\n' > "$repo/README.md"
@@ -260,5 +260,23 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   [ -n "$job" ]
   run grep -n -e '^    if:' -e 'continue-on-error' -e '|| true' <<< "$job"
   [ "$status" -eq 1 ]
-  grep -qx '      - run: scripts/release-gate.sh HEAD' <<< "$job"
+  grep -qx '      - run: scripts/release-ready.sh HEAD' <<< "$job"
+}
+
+# A pull request's checks run on a merge tree but attach to its head commit: release-ready must never succeed there,
+# nor for any event or branch but a push to main, and it must fail (not skip). On a main push it is the release gate.
+@test "release-ready succeeds only for a push to main that passes the release gate" {
+  for ev in "pull_request refs/pull/7/merge" "pull_request_target refs/heads/main" "push refs/heads/feature" "workflow_dispatch refs/heads/main" " "; do
+    set -- $ev
+    GITHUB_EVENT_NAME=${1:-} GITHUB_REF=${2:-} run scripts/release-ready.sh HEAD
+    [ "$status" -eq 1 ] || { echo "$ev: $output"; false; }
+    [[ "$output" == "not-ready not-a-push-to-main"* ]]
+  done
+  GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main run scripts/release-ready.sh HEAD
+  [ "$status" -eq 0 ]
+  [ "$output" = ready ]
+  printf 'release-gates-open: reason\n' > RELEASE-HOLD; commit
+  GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main run scripts/release-ready.sh HEAD
+  [ "$status" -eq 1 ]
+  [ "$output" = "not-ready held release-gates-open" ]
 }
