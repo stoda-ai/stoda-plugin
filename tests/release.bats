@@ -258,7 +258,8 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   wf=$BATS_TEST_DIRNAME/../.github/workflows/ci.yml
   job=$(awk '/^  release-ready:/{f=1; print; next} f && /^  [a-z]/{exit} f' "$wf")
   [ -n "$job" ]
-  run grep -n -e '^    if:' -e 'continue-on-error' -e '|| true' <<< "$job"
+  # No condition at the job or any step level, and nothing that turns a failure into success.
+  run grep -n -E -e '^[[:space:]]+(-[[:space:]]+)?if:' -e 'continue-on-error' -e '\|\| true' <<< "$job"
   [ "$status" -eq 1 ]
   grep -qx '      - run: scripts/release-ready.sh HEAD' <<< "$job"
 }

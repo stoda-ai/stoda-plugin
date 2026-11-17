@@ -30,10 +30,11 @@ Every command the plugin adds is `/stoda:<name>`. On a machine without a GitHub 
 
 Users install from the `release` branch. Changes merge to `main`; CI tests every commit on `main`, and only a commit
 that passed moves `release` (fast-forward only, together with its version tag, in one push), so nothing untested reaches
-users. The `release` branch accepts only commits on which both CI checks, `test` and `release-ready`, passed, and it
-can't be force-pushed or deleted. `release-ready` passes only for a commit pushed to `main` that passes the release
-gate; on a pull request it always fails, because a pull request's commit isn't releasable. It checks what is pushed,
-not who pushes it: anyone with write access could still move `release` by hand to a commit that passed both. The catalog's plugin entry itself points at `plugins/stoda` on `release`, so the plugin comes from `release` even when the catalog
+users. The `release` branch accepts only commits on which CI checks named `test` and `release-ready` passed, from
+GitHub Actions, and it can't be force-pushed or deleted. In this repository's workflow, `release-ready` passes only for
+a commit pushed to `main` that passes the release gate, and on a pull request it always fails. That protects against
+mistakes, not against people with write access: they can push to `release` by hand, and a workflow they change on
+another branch can report checks with the same names. Releases rely on those people being trusted. The catalog's plugin entry itself points at `plugins/stoda` on `release`, so the plugin comes from `release` even when the catalog
 is read from `main`; until the first release there is no `release` branch, and installing fails instead of taking
 untested code. A change reaches installed copies only when it raises `version` in `plugins/stoda/.claude-plugin/plugin.json`;
 CI refuses a pull request that changes anything users receive (`release-surface`) without raising it.
