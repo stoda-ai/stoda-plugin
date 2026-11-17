@@ -1,11 +1,14 @@
 {
   "name": "stoda",
-  "version": "0.1.20",
-  "description": "Stoda skills for Claude Code. Pre-release: one read-only skill, guide, that shows where you are and one next step.",
+  "displayName": "Stoda",
+  "version": "0.1.21",
+  "description": "Stoda's read-only repository orientation guide for Claude Code.",
   "author": {
     "name": "Stoda"
   },
   "license": "MIT",
   "homepage": "https://stoda.ai",
-  "repository": "https://github.com/stoda-ai/stoda-plugin"
+  "repository": "https://github.com/stoda-ai/stoda-plugin",
+  "documentationUrl": "https://github.com/stoda-ai/stoda-plugin/blob/main/plugins/stoda/README.md",
+  "supportUrl": "https://github.com/stoda-ai/stoda-plugin/issues"
 }
