@@ -298,8 +298,10 @@ STUB
   export PATH=$stub:$PATH
   # The release location, for the test only: the copy expects origin to be this bare remote instead of GitHub.
   # (where() drops a trailing .git, as GitHub URLs may or may not carry it.)
-  sed -i.bak "s#^want=\"github.com/\$REPO\"#want=\"${remote%.git}\"#" scripts/promote.sh && rm scripts/promote.sh.bak
+  sed -i.bak -e "s#^want=\"github.com/\$REPO\"#want=\"${remote%.git}\"#" -e 's#^    \*) echo "" ;;#    *) echo "$u" ;;#' \
+    scripts/promote.sh && rm scripts/promote.sh.bak
   grep -q "^want=\"${remote%.git}\"" scripts/promote.sh
+  grep -q '^    \*) echo "\$u" ;;' scripts/promote.sh
   git remote add origin "$remote"
 }
 
@@ -315,6 +317,11 @@ jobs_json() { # jobs_json <run> <sha> <test-conclusion> <ready-conclusion>
 @test "promote refuses an origin, or any push URL, that isn't the release repository, before fetching" {
   sha=$(git rev-parse HEAD)
   git remote add origin https://github.com/someone/fork.git
+  run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "$output" = "refused origin-not-stoda-ai/stoda-plugin" ]
+  # A local path that merely looks like the repository is not it.
+  git remote set-url origin github.com/stoda-ai/stoda-plugin.git
   run scripts/promote.sh "$sha"
   [ "$status" -eq 1 ]
   [ "$output" = "refused origin-not-stoda-ai/stoda-plugin" ]
@@ -354,6 +361,10 @@ jobs_json() { # jobs_json <run> <sha> <test-conclusion> <ready-conclusion>
   [ "$status" -eq 1 ]
   [ "${lines[1]}" = "refused ci-not-green run 43: release-ready=failure test=success" ]
   GH_RUNS_JSON=$runs GH_JOBS_JSON=$(jobs_json 99 "$sha" success success) run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused ci-not-green run 43: no jobs" ]
+  GH_RUNS_JSON=$runs GH_JOBS_JSON=$(jobs_json 43 0123456789abcdef0123456789abcdef01234567 success success) \
+    run scripts/promote.sh "$sha"
   [ "$status" -eq 1 ]
   [ "${lines[1]}" = "refused ci-not-green run 43: no jobs" ]
   [ -z "$(remote_ref refs/heads/release)" ]

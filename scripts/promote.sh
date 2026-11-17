@@ -15,7 +15,8 @@ REPO=stoda-ai/stoda-plugin
 sha=$1
 [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "error usage: give the full 40-character commit"; exit 2; }
 
-# github.com/<owner>/<repo> from an https, scp-style or ssh GitHub URL; anything else is returned unchanged.
+# github.com/<owner>/<repo> from an https, scp-style or ssh GitHub URL; any other form (a local path, another host) gives
+# nothing, so it never matches.
 where() {
   local u=$1
   u=${u%.git}
@@ -23,7 +24,7 @@ where() {
     https://github.com/*) echo "github.com/${u#https://github.com/}" ;;
     git@github.com:*) echo "github.com/${u#git@github.com:}" ;;
     ssh://git@github.com/*) echo "github.com/${u#ssh://git@github.com/}" ;;
-    *) echo "$u" ;;
+    *) echo "" ;;
   esac
 }
 want="github.com/$REPO"
