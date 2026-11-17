@@ -34,8 +34,10 @@ jobs:
   # Whether this commit may be released (release-ready.sh): only a push to main whose commit passes the release gate
   # (RELEASE-HOLD absent, LICENSE complete). It runs on every pull request and push, with no `if`, so it is never
   # "skipped" (which a required check would count as passing); on a pull request it fails, so a PR's head commit never
-  # carries a successful release-ready. The `release` branch's ruleset requires it and `test`, from GitHub Actions, on
-  # any commit pushed there; it doesn't depend on the release job's own result.
+  # carries a successful release-ready.
+  #
+  # CI never publishes: no job here can write to the repository. A repository admin releases a commit by hand with
+  # scripts/promote.sh, which checks this workflow's push run on main for that exact commit first.
   release-ready:
     runs-on: ubuntu-24.04
     steps:
@@ -43,28 +45,3 @@ jobs:
         with:
           persist-credentials: false
       - run: scripts/release-ready.sh HEAD
-
-  # Users install from the `release` branch, never from main: merging to main publishes nothing. After `test` passed on
-  # this exact commit, publish.sh opens the release gate (RELEASE-HOLD, LICENSE), tags a new version once, and moves
-  # `release` to the commit together with that tag in one atomic, fast-forward-only push. One run at a time.
-  release:
-    needs: [test, release-ready]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    concurrency:
-      group: release
-      cancel-in-progress: false
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - name: publish
-        env:
-          SHA: ${{ github.sha }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          scripts/publish.sh "$SHA"

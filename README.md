@@ -28,18 +28,22 @@ Every command the plugin adds is `/stoda:<name>`. On a machine without a GitHub 
 
 ## Updates
 
-Users install from the `release` branch. Changes merge to `main`; CI tests every commit on `main`, and only a commit
-that passed moves `release` (fast-forward only, together with its version tag, in one push), so nothing untested reaches
-users. The `release` branch accepts only commits on which CI checks named `test` and `release-ready` passed, from
-GitHub Actions, and it can't be force-pushed or deleted. In this repository's workflow, `release-ready` passes only for
-a commit pushed to `main` that passes the release gate, and on a pull request it always fails. That protects against
-mistakes, not against people with write access: they can push to `release` by hand, and a workflow they change on
-another branch can report checks with the same names. Releases rely on those people being trusted. The catalog's plugin entry itself points at `plugins/stoda` on `release`, so the plugin comes from `release` even when the catalog
-is read from `main`; until the first release there is no `release` branch, and installing fails instead of taking
-untested code. A change reaches installed copies only when it raises `version` in `plugins/stoda/.claude-plugin/plugin.json`;
-CI refuses a pull request that changes anything users receive (`release-surface`) without raising it.
-Run `/plugin marketplace update stoda` (or turn on auto-update for the `stoda` marketplace in `/plugin`) to pick up
-a new version.
+Users install from the `release` branch. Changes merge to `main` through reviewed pull requests; CI tests every pull
+request and every push to `main`, and reports two checks: `test`, and `release-ready`, which passes only for a commit
+pushed to `main` that passes the release gate (on a pull request it always fails). CI never publishes. A repository
+admin releases a commit by hand:
+
+```
+scripts/promote.sh <40-character commit of main>
+```
+
+It refuses unless the commit is on `main` and CI's run for that push to `main`, at that exact commit, has `test` and
+`release-ready` green; then it tags the version once and moves `release` to the commit with that tag in one
+fast-forward-only push. Only repository admins may create or move `release` and create version tags; `release` can't
+be force-pushed or deleted, and tags can't be moved or deleted. Releases therefore rely on repository admins being
+trusted; the checks guard against mistakes. The catalog's plugin entry itself points at `plugins/stoda` on `release`, so
+the plugin comes from `release` even when the catalog is read from `main`; until the first release there is no
+`release` branch, and installing fails instead of taking untested code.
 
 Each released version is also tagged `stoda--v<version>` on the commit it was released from, as a record. The
 catalog installs from `release`, so pinning the marketplace to a tag doesn't pin the plugin.
@@ -64,8 +68,9 @@ Needs `just`, `bats`, `shellcheck`, `jq` and Claude Code.
 - `just test`: validate the marketplace and plugin manifests, lint the scripts, run the tests. CI runs it on every
   pull request and on `main`.
 - `scripts/check-version.sh <base-ref>`: the version check CI runs on pull requests.
-- `scripts/publish.sh <commit>`: what CI runs after `test` passes on `main`. It refuses while `RELEASE-HOLD` exists or
-  `LICENSE` is missing, tags a new version once (`scripts/tag-release.sh`, which never moves a tag), and moves `release`
-  to the commit with that tag in one atomic, fast-forward-only push.
+- `scripts/promote.sh <commit>`: an admin's release of a `main` commit whose CI push run is green; it ends with
+  `scripts/publish.sh`, which refuses while `RELEASE-HOLD` exists or `LICENSE` is missing, tags a new version once
+  (`scripts/tag-release.sh`, which never moves a tag), and moves `release` with that tag in one atomic,
+  fast-forward-only push.
 
 Load the plugin from a checkout without installing it: `claude --plugin-dir plugins/stoda`.

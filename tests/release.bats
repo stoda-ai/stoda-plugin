@@ -11,7 +11,7 @@ setup() {
   git config --global commit.gpgsign false
   repo=$BATS_TEST_TMPDIR/repo
   mkdir -p "$repo/plugins/stoda/.claude-plugin" "$repo/scripts" "$repo/docs" "$repo/.claude-plugin"
-  for s in check-version tag-release release-gate release-ready publish; do cp "$BATS_TEST_DIRNAME/../scripts/$s.sh" "$repo/scripts/"; done
+  for s in check-version tag-release release-gate release-ready publish promote; do cp "$BATS_TEST_DIRNAME/../scripts/$s.sh" "$repo/scripts/"; done
   cp "$BATS_TEST_DIRNAME/../scripts/release-lib.sh" "$BATS_TEST_DIRNAME/../release-surface" "$repo/"
   mv "$repo/release-lib.sh" "$repo/scripts/"
   printf '# readme\n' > "$repo/README.md"
@@ -177,19 +177,13 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   [ "$(remote_ref refs/heads/release)" = "$docs" ]
 }
 
-# The release job: after `test`, on pushes to main, one at a time, and its only command is publish.sh, which fails
-# the job on any refusal (no continue-on-error, no `|| true`). Nothing else in the workflow tags or pushes.
-@test "the workflow publishes only through publish.sh after test, on main, without swallowing failures" {
+# CI never publishes: no job can write to the repository, and nothing in the workflow tags, pushes or releases.
+@test "the workflow never publishes: read-only token, no release job, no push or tag" {
   wf=$BATS_TEST_DIRNAME/../.github/workflows/ci.yml
-  job=$(awk '/^  release:/{f=1} f' "$wf")
-  grep -qxF '    needs: [test, release-ready]' <<< "$job"
-  grep -qx "    if: github.event_name == 'push' && github.ref == 'refs/heads/main'" <<< "$job"
-  grep -qx '      cancel-in-progress: false' <<< "$job"
-  [ "$(grep -c 'scripts/publish.sh' <<< "$job")" -eq 1 ]
-  grep -qx '          scripts/publish.sh "\$SHA"' <<< "$job"
-  run grep -n -e 'continue-on-error' -e '|| true' -e 'set +e' <<< "$job"
-  [ "$status" -eq 1 ]
-  run grep -n -e 'tag-release.sh' -e 'git push' -e 'git tag' "$wf"
+  grep -qx '  contents: read' "$wf"
+  code=$(grep -v -E '^[[:space:]]*#' "$wf")
+  run grep -n -e 'contents: write' -e 'permissions: write' -e 'write-all' -e '^  release:' -e 'publish.sh' \
+    -e 'promote.sh' -e 'tag-release.sh' -e 'git push' -e 'git tag' <<< "$code"
   [ "$status" -eq 1 ]
 }
 
@@ -280,4 +274,58 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main run scripts/release-ready.sh HEAD
   [ "$status" -eq 1 ]
   [ "$output" = "not-ready held release-gates-open" ]
+}
+
+# promote.sh: an admin's manual release, refused unless the commit is on main and CI's push run on main for that exact
+# commit has `test` and `release-ready` green. `gh` is a stub that returns what `gh api --jq` would print.
+promote_setup() {
+  git --git-dir="$remote" config receive.denyNonFastForwards true
+  git push -q "$remote" HEAD:refs/heads/main
+  git remote add origin "$remote"
+  stub=$BATS_TEST_TMPDIR/stub
+  mkdir -p "$stub"
+  printf '#!/usr/bin/env bash\ncase "$2" in\n  *"/runs?"*) printf "%%s" "${GH_RUNS-}" ;;\n  *"/jobs?"*) printf "%%s" "${GH_JOBS-}" ;;\n  *) exit 9 ;;\nesac\n' > "$stub/gh"
+  chmod +x "$stub/gh"
+  export PATH=$stub:$PATH
+}
+
+@test "promote refuses a short sha, a commit not on main, no main push run, or a run that isn't green" {
+  promote_setup
+  sha=$(git rev-parse HEAD)
+  run scripts/promote.sh "${sha:0:12}"
+  [ "$status" -eq 2 ]
+  git switch -q -c side; printf 'x\n' > docs/side.md; commit
+  run scripts/promote.sh "$(git rev-parse HEAD)" o/r origin
+  [ "$status" -eq 1 ]
+  [ "$output" = "refused not-on-main" ]
+  git switch -q main 2>/dev/null || git switch -q -
+  GH_RUNS= run scripts/promote.sh "$sha" o/r origin
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused no-main-push-run" ]
+  GH_RUNS=42 GH_JOBS="release-ready=failure test=success" run scripts/promote.sh "$sha" o/r origin
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused ci-not-green run 42: release-ready=failure test=success" ]
+  GH_RUNS=42 GH_JOBS="test=success" run scripts/promote.sh "$sha" o/r origin
+  [ "$status" -eq 1 ]
+  [ -z "$(remote_ref refs/heads/release)" ]
+  [ -z "$(git tag)" ]
+}
+
+@test "promote releases a green main commit: release branch and tag move together, and the gate still applies" {
+  promote_setup
+  sha=$(git rev-parse HEAD)
+  GH_RUNS=$'43\n42' GH_JOBS="release-ready=success test=success" run scripts/promote.sh "$sha" o/r origin
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ "${lines[0]}" = "on-main $sha" ]
+  [ "${lines[1]}" = "ci-green run 43" ]
+  [ "${lines[${#lines[@]}-1]}" = "published $sha" ]
+  [ "$(remote_ref refs/heads/release)" = "$sha" ]
+  [ "$(remote_ref 'refs/tags/stoda--v0.1.0^{commit}')" = "$sha" ]
+  printf 'release-gates-open: reason\n' > RELEASE-HOLD; commit
+  git push -q origin HEAD:refs/heads/main
+  held=$(git rev-parse HEAD)
+  GH_RUNS=44 GH_JOBS="release-ready=success test=success" run scripts/promote.sh "$held" o/r origin
+  [ "$status" -eq 1 ]
+  [ "${lines[${#lines[@]}-1]}" = "held release-gates-open" ]
+  [ "$(remote_ref refs/heads/release)" = "$sha" ]
 }
