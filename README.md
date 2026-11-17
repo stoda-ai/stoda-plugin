@@ -1,6 +1,7 @@
 # Stoda plugin for Claude Code
 
-The [Stoda](https://stoda.ai) plugin for Claude Code, and the marketplace it is installed from.
+The [Stoda](https://stoda.ai) plugin for Claude Code, and the marketplace it is installed from. What the plugin does,
+what it runs and sends, and where to get support: [`plugins/stoda/README.md`](plugins/stoda/README.md).
 
 ## Status
 
