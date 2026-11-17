@@ -11,7 +11,7 @@ setup() {
   git config --global commit.gpgsign false
   repo=$BATS_TEST_TMPDIR/repo
   mkdir -p "$repo/plugins/stoda/.claude-plugin" "$repo/scripts" "$repo/docs" "$repo/.claude-plugin"
-  for s in check-version tag-release release-gate publish; do cp "$BATS_TEST_DIRNAME/../scripts/$s.sh" "$repo/scripts/"; done
+  for s in check-version tag-release release-gate release-ready publish promote; do cp "$BATS_TEST_DIRNAME/../scripts/$s.sh" "$repo/scripts/"; done
   cp "$BATS_TEST_DIRNAME/../scripts/release-lib.sh" "$BATS_TEST_DIRNAME/../release-surface" "$repo/"
   mv "$repo/release-lib.sh" "$repo/scripts/"
   printf '# readme\n' > "$repo/README.md"
@@ -177,19 +177,13 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   [ "$(remote_ref refs/heads/release)" = "$docs" ]
 }
 
-# The release job: after `test`, on pushes to main, one at a time, and its only command is publish.sh, which fails
-# the job on any refusal (no continue-on-error, no `|| true`). Nothing else in the workflow tags or pushes.
-@test "the workflow publishes only through publish.sh after test, on main, without swallowing failures" {
+# CI never publishes: no job can write to the repository, and nothing in the workflow tags, pushes or releases.
+@test "the workflow never publishes: read-only token, no release job, no push or tag" {
   wf=$BATS_TEST_DIRNAME/../.github/workflows/ci.yml
-  job=$(awk '/^  release:/{f=1} f' "$wf")
-  grep -qx '    needs: test' <<< "$job"
-  grep -qx "    if: github.event_name == 'push' && github.ref == 'refs/heads/main'" <<< "$job"
-  grep -qx '      cancel-in-progress: false' <<< "$job"
-  [ "$(grep -c 'scripts/publish.sh' <<< "$job")" -eq 1 ]
-  grep -qx '          scripts/publish.sh "\$SHA"' <<< "$job"
-  run grep -n -e 'continue-on-error' -e '|| true' -e 'set +e' <<< "$job"
-  [ "$status" -eq 1 ]
-  run grep -n -e 'tag-release.sh' -e 'git push' -e 'git tag' "$wf"
+  grep -qx '  contents: read' "$wf"
+  code=$(grep -v -E '^[[:space:]]*#' "$wf")
+  run grep -n -e 'contents: write' -e 'permissions: write' -e 'write-all' -e '^  release:' -e 'publish.sh' \
+    -e 'promote.sh' -e 'tag-release.sh' -e 'git push' -e 'git tag' <<< "$code"
   [ "$status" -eq 1 ]
 }
 
@@ -250,4 +244,148 @@ remote_ref() { git --git-dir="$remote" rev-parse -q --verify "$1" || true; }
   [ -f "$root/plugins/stoda/LICENSE" ] && [ ! -L "$root/plugins/stoda/LICENSE" ]
   cmp "$root/LICENSE" "$root/plugins/stoda/LICENSE"
   grep -qx 'Copyright (c) 2026 Stoda' "$root/LICENSE"
+}
+
+# The check the release branch's ruleset requires: it runs on every event (never skipped, which a required check would
+# treat as passing) and its only command is the gate, so it fails while held.
+@test "the release-ready job always runs the release gate and never skips" {
+  wf=$BATS_TEST_DIRNAME/../.github/workflows/ci.yml
+  job=$(awk '/^  release-ready:/{f=1; print; next} f && /^  [a-z]/{exit} f' "$wf")
+  [ -n "$job" ]
+  # No condition at the job or any step level, and nothing that turns a failure into success.
+  run grep -n -E -e '^[[:space:]]+(-[[:space:]]+)?if:' -e 'continue-on-error' -e '\|\| true' <<< "$job"
+  [ "$status" -eq 1 ]
+  grep -qx '      - run: scripts/release-ready.sh HEAD' <<< "$job"
+}
+
+# A pull request's checks run on a merge tree but attach to its head commit: release-ready must never succeed there,
+# nor for any event or branch but a push to main, and it must fail (not skip). On a main push it is the release gate.
+@test "release-ready succeeds only for a push to main that passes the release gate" {
+  for ev in "pull_request refs/pull/7/merge" "pull_request_target refs/heads/main" "push refs/heads/feature" "workflow_dispatch refs/heads/main" " "; do
+    set -- $ev
+    GITHUB_EVENT_NAME=${1:-} GITHUB_REF=${2:-} run scripts/release-ready.sh HEAD
+    [ "$status" -eq 1 ] || { echo "$ev: $output"; false; }
+    [[ "$output" == "not-ready not-a-push-to-main"* ]]
+  done
+  GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main run scripts/release-ready.sh HEAD
+  [ "$status" -eq 0 ]
+  [ "$output" = ready ]
+  printf 'release-gates-open: reason\n' > RELEASE-HOLD; commit
+  GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main run scripts/release-ready.sh HEAD
+  [ "$status" -eq 1 ]
+  [ "$output" = "not-ready held release-gates-open" ]
+}
+
+# promote.sh: an admin's manual release. `gh` is a stub that applies the script's own --jq filter to raw API JSON
+# (GH_RUNS_JSON, GH_JOBS_JSON), records each endpoint, and fails when GH_FAIL is set; so the filtering is what's tested.
+promote_setup() {
+  git --git-dir="$remote" config receive.denyNonFastForwards true
+  git push -q "$remote" HEAD:refs/heads/main
+  stub=$BATS_TEST_TMPDIR/stub
+  mkdir -p "$stub"
+  cat > "$stub/gh" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = api ] && [ "$3" = --jq ] || exit 9
+printf '%s\n' "$2" >> "$BATS_TEST_TMPDIR/gh-calls"
+[ -z "${GH_FAIL-}" ] || exit 1
+case $2 in
+  *"/runs?"*) jq -r "$4" <<< "${GH_RUNS_JSON:-{\"workflow_runs\": []\}}" ;;
+  *"/jobs?"*) jq -r "$4" <<< "${GH_JOBS_JSON:-{\"jobs\": []\}}" ;;
+  *) exit 9 ;;
+esac
+STUB
+  chmod +x "$stub/gh"
+  export PATH=$stub:$PATH
+  # The release location, for the test only: the copy expects origin to be this bare remote instead of GitHub.
+  # (where() drops a trailing .git, as GitHub URLs may or may not carry it.)
+  sed -i.bak -e "s#^want=\"github.com/\$REPO\"#want=\"${remote%.git}\"#" -e 's#^    \*) echo "" ;;#    *) echo "$u" ;;#' \
+    scripts/promote.sh && rm scripts/promote.sh.bak
+  grep -q "^want=\"${remote%.git}\"" scripts/promote.sh
+  grep -q '^    \*) echo "\$u" ;;' scripts/promote.sh
+  git remote add origin "$remote"
+}
+
+run_json() { # run_json <id> <sha> [event] [branch] [path] [repo] [status]
+  printf '{"id": %s, "head_sha": "%s", "event": "%s", "head_branch": "%s", "path": "%s", "repository": {"full_name": "%s"}, "status": "%s"}' \
+    "$1" "$2" "${3:-push}" "${4:-main}" "${5:-.github/workflows/ci.yml}" "${6:-stoda-ai/stoda-plugin}" "${7:-completed}"
+}
+jobs_json() { # jobs_json <run> <sha> <test-conclusion> <ready-conclusion>
+  printf '{"jobs": [{"run_id": %s, "head_sha": "%s", "name": "test", "conclusion": "%s"}, {"run_id": %s, "head_sha": "%s", "name": "release-ready", "conclusion": "%s"}]}' \
+    "$1" "$2" "$3" "$1" "$2" "$4"
+}
+
+@test "promote refuses an origin, or any push URL, that isn't the release repository, before fetching" {
+  sha=$(git rev-parse HEAD)
+  git remote add origin https://github.com/someone/fork.git
+  run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "$output" = "refused origin-not-stoda-ai/stoda-plugin" ]
+  # A local path that merely looks like the repository is not it.
+  git remote set-url origin github.com/stoda-ai/stoda-plugin.git
+  run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "$output" = "refused origin-not-stoda-ai/stoda-plugin" ]
+  git remote set-url origin git@github.com:stoda-ai/stoda-plugin.git
+  git remote set-url --add --push origin https://github.com/stoda-ai/stoda-plugin.git
+  git remote set-url --add --push origin https://github.com/someone/fork.git
+  run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "$output" = "refused push-url-not-stoda-ai/stoda-plugin" ]
+  run scripts/promote.sh "${sha:0:12}"
+  [ "$status" -eq 2 ]
+}
+
+@test "promote refuses a commit not on main, an API error, and runs that aren't this repo's ci push on main" {
+  promote_setup
+  sha=$(git rev-parse HEAD)
+  git switch -q -c side; printf 'x\n' > docs/side.md; commit
+  run scripts/promote.sh "$(git rev-parse HEAD)"
+  [ "$status" -eq 1 ]
+  [ "$output" = "refused not-on-main" ]
+  GH_FAIL=1 run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused ci-unreadable" ]
+  other=$(git rev-parse HEAD)
+  GH_RUNS_JSON="{\"workflow_runs\": [$(run_json 1 "$sha" pull_request), $(run_json 2 "$sha" push side), $(run_json 3 "$sha" push main .github/workflows/other.yml), $(run_json 4 "$sha" push main .github/workflows/ci.yml someone/fork), $(run_json 5 "$other"), $(run_json 6 "$sha" push main .github/workflows/ci.yml stoda-ai/stoda-plugin in_progress)]}" \
+    run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused no-main-push-run" ]
+  grep -q "^repos/stoda-ai/stoda-plugin/actions/runs?head_sha=$sha&event=push&branch=main&status=completed" "$BATS_TEST_TMPDIR/gh-calls"
+}
+
+@test "promote uses the newest green ci push run, and refuses one whose jobs aren't both green" {
+  promote_setup
+  sha=$(git rev-parse HEAD)
+  runs="{\"workflow_runs\": [$(run_json 41 "$sha"), $(run_json 43 "$sha"), $(run_json 42 "$sha")]}"
+  GH_RUNS_JSON=$runs GH_JOBS_JSON=$(jobs_json 43 "$sha" success failure) run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused ci-not-green run 43: release-ready=failure test=success" ]
+  GH_RUNS_JSON=$runs GH_JOBS_JSON=$(jobs_json 99 "$sha" success success) run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused ci-not-green run 43: no jobs" ]
+  GH_RUNS_JSON=$runs GH_JOBS_JSON=$(jobs_json 43 0123456789abcdef0123456789abcdef01234567 success success) \
+    run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "refused ci-not-green run 43: no jobs" ]
+  [ -z "$(remote_ref refs/heads/release)" ]
+  [ -z "$(git tag)" ]
+  GH_RUNS_JSON=$runs GH_JOBS_JSON=$(jobs_json 43 "$sha" success success) run scripts/promote.sh "$sha"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ "${lines[1]}" = "ci-green run 43" ]
+  [ "${lines[${#lines[@]}-1]}" = "published $sha" ]
+  [ "$(remote_ref refs/heads/release)" = "$sha" ]
+  [ "$(remote_ref 'refs/tags/stoda--v0.1.0^{commit}')" = "$sha" ]
+  grep -q "^repos/stoda-ai/stoda-plugin/actions/runs/43/jobs" "$BATS_TEST_TMPDIR/gh-calls"
+}
+
+@test "promote still applies the release gate to a green main commit" {
+  promote_setup
+  printf 'release-gates-open: reason\n' > RELEASE-HOLD; commit
+  git push -q origin HEAD:refs/heads/main
+  sha=$(git rev-parse HEAD)
+  GH_RUNS_JSON="{\"workflow_runs\": [$(run_json 7 "$sha")]}" GH_JOBS_JSON=$(jobs_json 7 "$sha" success success) \
+    run scripts/promote.sh "$sha"
+  [ "$status" -eq 1 ]
+  [ "${lines[${#lines[@]}-1]}" = "held release-gates-open" ]
+  [ -z "$(remote_ref refs/heads/release)" ]
 }
